@@ -403,7 +403,8 @@ function App() {
             <span className="pending-link">WhatsApp próximamente <ArrowUpRight size={16} /></span>
           </div>
         </div>
-        <p className="copyright">© 2026 Bbros Store · Santiago, Chile · Desarrollado por Abraham Barrera</p>
+        <p className="copyright">© 2026 Bbros Store · Santiago, Chile</p>
+        <p className="copyright">Desarrollado por Abraham Barrera</p>
       </footer>
     </div>
   )
