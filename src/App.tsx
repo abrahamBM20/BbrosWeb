@@ -3,7 +3,10 @@ import {
   ArrowUpRight,
   Camera,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   Menu,
+  MessageCircle,
   Moon,
   Search,
   ShoppingBag,
@@ -24,6 +27,8 @@ type DisplayProduct = {
   price: number
   stock: number
   image: string
+  images: string[]
+  description?: string
   tag?: string
 }
 
@@ -34,6 +39,96 @@ const formatPrice = (price: number) =>
     maximumFractionDigits: 0,
   }).format(price)
 
+function ProductDetail({
+  product,
+  isDark,
+  onToggleTheme,
+  onBack,
+}: {
+  product: DisplayProduct
+  isDark: boolean
+  onToggleTheme: () => void
+  onBack: () => void
+}) {
+  const images = product.images.length > 0 ? product.images : [product.image]
+  const [activeImage, setActiveImage] = useState(0)
+  const imageIndex = (offset: number) =>
+    (activeImage + offset + images.length) % images.length
+
+  return (
+    <div className={isDark ? 'app dark' : 'app'}>
+      <div className="announcement">
+        <Sparkles size={14} />
+        <span>Prendas que valen la pena · American Premium</span>
+      </div>
+      <header className="site-header">
+        <button className="back-link" onClick={onBack}>
+          <ChevronLeft size={17} /> Volver a la colección
+        </button>
+        <a className="brand" href="#" aria-label="Bbros Store, inicio">
+          <img src="/logoBbros.jpeg" alt="Bbros Store" />
+        </a>
+        <button
+          className="icon-button"
+          aria-label={isDark ? 'Usar tema claro' : 'Usar tema oscuro'}
+          onClick={onToggleTheme}
+        >
+          {isDark ? <Sun size={19} /> : <Moon size={19} />}
+        </button>
+      </header>
+      <main className="product-detail">
+        <div className="detail-gallery">
+          <div className="detail-main-image">
+            <img src={images[activeImage]} alt={`${product.name}, foto ${activeImage + 1}`} />
+            {images.length > 1 && (
+              <>
+                <button className="gallery-arrow gallery-prev" onClick={() => setActiveImage(imageIndex(-1))} aria-label="Foto anterior">
+                  <ChevronLeft size={21} />
+                </button>
+                <button className="gallery-arrow gallery-next" onClick={() => setActiveImage(imageIndex(1))} aria-label="Foto siguiente">
+                  <ChevronRight size={21} />
+                </button>
+                <span className="gallery-counter">{activeImage + 1} / {images.length}</span>
+              </>
+            )}
+          </div>
+          {images.length > 1 && (
+            <div className="detail-thumbnails">
+              {images.map((image, index) => (
+                <button
+                  className={index === activeImage ? 'thumbnail active' : 'thumbnail'}
+                  key={image}
+                  onClick={() => setActiveImage(index)}
+                  aria-label={`Ver foto ${index + 1}`}
+                >
+                  <img src={image} alt="" />
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+        <div className="detail-copy">
+          <p className="eyebrow">{product.category} / {product.quality}</p>
+          <h1>{product.name}</h1>
+          <p className="detail-price">{formatPrice(product.price)}</p>
+          <div className="detail-divider" />
+          <p className="detail-description">
+            {product.description || 'Una pieza seleccionada por Bbros Store, revisada y lista para una nueva historia.'}
+          </p>
+          <div className="detail-facts">
+            <span>Calidad <strong>{product.quality}</strong></span>
+            <span>Disponibilidad <strong>{product.stock === 1 ? 'Última unidad' : `${product.stock} unidades`}</strong></span>
+          </div>
+          <a className="primary-button detail-contact" href="https://www.instagram.com/bbros.store?xtok=MXRqbHA3b2Mxa2U2bw==" target="_blank" rel="noopener noreferrer">
+            <Camera size={17} /> Consultar por Instagram <ArrowUpRight size={16} />
+          </a>
+          <p className="detail-note"><MessageCircle size={15} /> Escríbenos para coordinar precio y envío.</p>
+        </div>
+      </main>
+    </div>
+  )
+}
+
 function App() {
   const [adminMode] = useState(() => window.location.hash === '#admin')
   const [isDark, setIsDark] = useState(false)
@@ -41,6 +136,11 @@ function App() {
   const [search, setSearch] = useState('')
   const [category, setCategory] = useState('Todo')
   const [catalogProducts, setCatalogProducts] = useState<DisplayProduct[]>([])
+  const [selectedProductId, setSelectedProductId] = useState<string | null>(
+    () => window.location.hash.startsWith('#producto=')
+      ? window.location.hash.replace('#producto=', '')
+      : null,
+  )
 
   useEffect(() => {
     if (adminMode) return
@@ -57,6 +157,8 @@ function App() {
             price: product.price,
             stock: product.stock,
             image: product.images[0] || '',
+            images: product.images,
+            description: product.description,
             tag: product.tag,
           })),
         )
@@ -65,6 +167,15 @@ function App() {
         console.warn('No se pudo cargar el catálogo de Supabase:', loadError.message)
       })
   }, [adminMode])
+
+  useEffect(() => {
+    const onHashChange = () => {
+      const hash = window.location.hash
+      setSelectedProductId(hash.startsWith('#producto=') ? hash.replace('#producto=', '') : null)
+    }
+    window.addEventListener('hashchange', onHashChange)
+    return () => window.removeEventListener('hashchange', onHashChange)
+  }, [])
 
   const visibleProducts = useMemo(() => {
     const query = search.trim().toLowerCase()
@@ -87,6 +198,19 @@ function App() {
           window.location.hash = ''
           window.location.reload()
         }}
+      />
+    )
+  }
+
+  const selectedProduct = catalogProducts.find((product) => product.id === selectedProductId)
+
+  if (selectedProduct) {
+    return (
+      <ProductDetail
+        product={selectedProduct}
+        isDark={isDark}
+        onToggleTheme={() => setIsDark((value) => !value)}
+        onBack={() => { window.location.hash = 'coleccion' }}
       />
     )
   }
@@ -145,7 +269,7 @@ function App() {
               <em>cualquier ropa.</em>
             </h1>
             <p className="hero-description">
-              Vendemos prendas que valen la pena. Una selección curada de
+              Vendemos prendas que valen la pena. Una selección al callo de
               ropa americana premium para usarla a tu manera.
             </p>
             <div className="hero-actions">
@@ -215,7 +339,9 @@ function App() {
             {visibleProducts.map((product) => (
               <article className="product-card" key={product.id}>
                 <div className="product-image">
-                  <img src={product.image} alt={product.name} loading="lazy" />
+                  <a href={`#producto=${product.id}`} aria-label={`Ver ${product.name}`}>
+                    <img src={product.image} alt={product.name} loading="lazy" />
+                  </a>
                   {product.tag && <span className="product-tag">{product.tag}</span>}
                   <span className="stock-label">
                     {product.stock === 1 ? 'Última unidad' : `${product.stock} disponibles`}
@@ -224,7 +350,7 @@ function App() {
                 <div className="product-info">
                   <div>
                     <p className="product-category">{product.category}</p>
-                    <h3>{product.name}</h3>
+                    <h3><a href={`#producto=${product.id}`}>{product.name}</a></h3>
                   </div>
                   <div className="product-meta">
                     <span className="quality">{product.quality}</span>
@@ -257,7 +383,7 @@ function App() {
           <div className="manifesto-side">
             <span>American</span>
             <span>Premium</span>
-            <span>Since 2024</span>
+            <span>Since 2026</span>
           </div>
         </section>
       </main>
@@ -270,14 +396,14 @@ function App() {
         <div className="footer-links">
           <div>
             <p className="footer-label">Síguenos</p>
-            <a className="pending-link" href="https://www.instagram.com" target="_blank" rel="noopener noreferrer"><Camera size={16} /> Instagram </a>
+            <a className="pending-link" href="https://www.instagram.com/bbros.store?xtok=MXRqbHA3b2Mxa2U2bw==" target="_blank" rel="noopener noreferrer"><Camera size={16} /> Instagram </a>
           </div>
           <div>
             <p className="footer-label">¿Te gustó algo?</p>
             <span className="pending-link">WhatsApp próximamente <ArrowUpRight size={16} /></span>
           </div>
         </div>
-        <p className="copyright">© 2024 Bbros Store · Santiago, Chile</p>
+        <p className="copyright">© 2026 Bbros Store · Santiago, Chile · Desarrollado por Abraham Barrera</p>
       </footer>
     </div>
   )

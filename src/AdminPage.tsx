@@ -23,7 +23,7 @@ type ProductForm = {
   price: string
   stock: string
   tag: string
-  image: string
+  images: string[]
   published: boolean
 }
 
@@ -35,7 +35,7 @@ const emptyForm: ProductForm = {
   price: '',
   stock: '1',
   tag: '',
-  image: '',
+  images: [''],
   published: true,
 }
 
@@ -47,7 +47,7 @@ const formFromProduct = (product: Product): ProductForm => ({
   price: String(product.price),
   stock: String(product.stock),
   tag: product.tag || '',
-  image: product.images[0] || '',
+  images: product.images.length > 0 ? product.images : [''],
   published: product.published,
 })
 
@@ -58,7 +58,7 @@ export default function AdminPage({ onBack }: { onBack: () => void }) {
   const [products, setProducts] = useState<Product[]>([])
   const [form, setForm] = useState<ProductForm>(emptyForm)
   const [editingId, setEditingId] = useState<string | null>(null)
-  const [imageFile, setImageFile] = useState<File | null>(null)
+  const [imageFiles, setImageFiles] = useState<File[]>([])
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
@@ -111,8 +111,8 @@ export default function AdminPage({ onBack }: { onBack: () => void }) {
     setSaving(true)
     setError('')
     setMessage('')
-    let imageUrl = form.image.trim()
-    if (imageFile) {
+    const uploadedImages: string[] = []
+    for (const imageFile of imageFiles) {
       const extension = imageFile.name.split('.').pop()?.toLowerCase() || 'jpg'
       const filePath = `${crypto.randomUUID()}.${extension}`
       const { error: uploadError } = await supabase.storage
@@ -126,8 +126,11 @@ export default function AdminPage({ onBack }: { onBack: () => void }) {
       const { data: publicUrl } = supabase.storage
         .from('product-images')
         .getPublicUrl(filePath)
-      imageUrl = publicUrl.publicUrl
+      uploadedImages.push(publicUrl.publicUrl)
     }
+    const imageUrls = uploadedImages.length > 0
+      ? uploadedImages
+      : form.images.map((image) => image.trim()).filter(Boolean).slice(0, 3)
     const payload = {
       name: form.name.trim(),
       description: form.description.trim(),
@@ -136,7 +139,7 @@ export default function AdminPage({ onBack }: { onBack: () => void }) {
       price: Number(form.price),
       stock: Number(form.stock),
       tag: form.tag.trim(),
-      images: imageUrl ? [imageUrl] : [],
+      images: imageUrls,
       published: form.published,
       updated_at: new Date().toISOString(),
     }
@@ -151,7 +154,7 @@ export default function AdminPage({ onBack }: { onBack: () => void }) {
     }
     setMessage(editingId ? 'Prenda actualizada.' : 'Prenda creada.')
     setForm(emptyForm)
-    setImageFile(null)
+    setImageFiles([])
     setEditingId(null)
     await loadAdminData()
   }
@@ -212,19 +215,24 @@ export default function AdminPage({ onBack }: { onBack: () => void }) {
         </div>
         <div className="admin-layout">
           <form className="admin-card product-form" onSubmit={saveProduct}>
-            <div className="form-heading"><div><p className="eyebrow">{editingId ? 'Editar prenda' : 'Nueva publicación'}</p><h2>{editingId ? 'Actualiza los detalles' : 'Sube una prenda'}</h2></div>{editingId && <button type="button" className="text-link" onClick={() => { setEditingId(null); setForm(emptyForm) }}>Cancelar</button>}</div>
+            <div className="form-heading"><div><p className="eyebrow">{editingId ? 'Editar prenda' : 'Nueva publicación'}</p><h2>{editingId ? 'Actualiza los detalles' : 'Sube una prenda'}</h2></div>{editingId && <button type="button" className="text-link" onClick={() => { setEditingId(null); setForm(emptyForm); setImageFiles([]) }}>Cancelar</button>}</div>
             <label>Nombre<input value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} required /></label>
             <label>Descripción<textarea value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} rows={3} /></label>
             <div className="form-row"><label>Categoría<select value={form.category} onChange={(event) => setForm({ ...form, category: event.target.value })}>{['Poleras', 'Pantalones', 'Chaquetas', 'Polerones', 'Accesorios'].map((item) => <option key={item}>{item}</option>)}</select></label><label>Calidad<select value={form.quality} onChange={(event) => setForm({ ...form, quality: event.target.value as Product['quality'] })}><option>Premium</option><option>Grade A</option><option>Grade B</option></select></label></div>
             <div className="form-row"><label>Precio CLP<input type="number" min="0" value={form.price} onChange={(event) => setForm({ ...form, price: event.target.value })} required /></label><label>Stock<input type="number" min="0" value={form.stock} onChange={(event) => setForm({ ...form, stock: event.target.value })} required /></label></div>
-            <label>Foto de la prenda <span className="label-hint">(JPG, PNG o WebP)</span><input type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => setImageFile(event.target.files?.[0] ?? null)} /></label>
-            <label>O usa una URL de imagen <input type="url" value={form.image} onChange={(event) => setForm({ ...form, image: event.target.value })} placeholder="https://..." /></label>
+            <label>Fotos de la prenda <span className="label-hint">(máximo 3 · JPG, PNG o WebP)</span><input type="file" accept="image/jpeg,image/png,image/webp" multiple onChange={(event) => setImageFiles(Array.from(event.target.files ?? []).slice(0, 3))} /></label>
+            <div className="image-url-fields">
+              {form.images.map((image, index) => (
+                <label key={index}>URL foto {index + 1}<input type="url" value={image} onChange={(event) => setForm({ ...form, images: form.images.map((current, currentIndex) => currentIndex === index ? event.target.value : current) })} placeholder="https://..." /></label>
+              ))}
+            </div>
+            <button type="button" className="add-image-button" disabled={form.images.length >= 3} onClick={() => setForm({ ...form, images: [...form.images, ''] })}><Plus size={14} /> Agregar URL</button>
             <label>Etiqueta<input value={form.tag} onChange={(event) => setForm({ ...form, tag: event.target.value })} placeholder="Ej: New drop" /></label>
             <label className="checkbox-label"><input type="checkbox" checked={form.published} onChange={(event) => setForm({ ...form, published: event.target.checked })} /> Visible en la tienda</label>
             {error && <p className="admin-error">{error}</p>}{message && <p className="admin-success"><Check size={15} /> {message}</p>}
             <button className="primary-button admin-submit" type="submit" disabled={saving}>{saving ? 'Guardando...' : <><Upload size={16} /> {editingId ? 'Guardar cambios' : 'Publicar prenda'}</>}</button>
           </form>
-          <section className="admin-card product-list"><div className="form-heading"><div><p className="eyebrow">Inventario</p><h2>Tus prendas</h2></div><button className="primary-button small-button" onClick={() => { setEditingId(null); setForm(emptyForm) }}><Plus size={16} /> Nueva</button></div>{products.length === 0 ? <p className="empty-admin">Aún no tienes productos.</p> : products.map((product) => <article className="admin-product" key={product.id}><div className="admin-product-image">{product.images[0] ? <img src={product.images[0]} alt="" /> : <ImagePlus size={18} />}</div><div className="admin-product-copy"><strong>{product.name}</strong><span>{product.category} · {product.published ? 'Publicado' : 'Borrador'} · Stock {product.stock}</span><b>{new Intl.NumberFormat('es-CL', { style: 'currency', currency: 'CLP', maximumFractionDigits: 0 }).format(product.price)}</b></div><div className="admin-product-actions"><button aria-label={`Editar ${product.name}`} onClick={() => { setEditingId(product.id); setForm(formFromProduct(product)) }}><Pencil size={16} /></button><button aria-label={`Eliminar ${product.name}`} onClick={() => void deleteProduct(product)}><Trash2 size={16} /></button></div></article>)}</section>
+          <section className="admin-card product-list"><div className="form-heading"><div><p className="eyebrow">Inventario</p><h2>Tus prendas</h2></div><button className="primary-button small-button" onClick={() => { setEditingId(null); setForm(emptyForm); setImageFiles([]) }}><Plus size={16} /> Nueva</button></div>{products.length === 0 ? <p className="empty-admin">Aún no tienes productos.</p> : products.map((product) => <article className="admin-product" key={product.id}><div className="admin-product-image">{product.images[0] ? <img src={product.images[0]} alt="" /> : <ImagePlus size={18} />}</div><div className="admin-product-copy"><strong>{product.name}</strong><span>{product.category} · {product.published ? 'Publicado' : 'Borrador'} · Stock {product.stock}</span><b>{new Intl.NumberFormat('es-CL', { style: 'currency', currency: 'CLP', maximumFractionDigits: 0 }).format(product.price)}</b></div><div className="admin-product-actions"><button aria-label={`Editar ${product.name}`} onClick={() => { setEditingId(product.id); setForm(formFromProduct(product)); setImageFiles([]) }}><Pencil size={16} /></button><button aria-label={`Eliminar ${product.name}`} onClick={() => void deleteProduct(product)}><Trash2 size={16} /></button></div></article>)}</section>
         </div>
       </main>
     </div>
